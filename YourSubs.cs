@@ -6,7 +6,6 @@ using System.Net;
 using System.Web;
 using System.Text.RegularExpressions;
 using Sublight.Plugins.SubtitleProvider.Types;
-using System.Diagnostics;
 
 namespace Sublight.Plugins.SubtitleProvider.BuiltIn
 {
@@ -50,16 +49,31 @@ namespace Sublight.Plugins.SubtitleProvider.BuiltIn
                 if (matchesCount == 0)
                     return null;
 
+                // Check the user-specified episode and/or season filter
+                string seasonNumber;
+                string episodeNumber;
+
+                seasonNumber = GetFilterScalar(filter, typeof(SearchFilterSeason));
+                episodeNumber = GetFilterScalar(filter, typeof(SearchFilterEpisode));
+
                 string dataMovies = "";
                 string dataSeries = "";
                 string suggestion, id;
+                string url = "";
 
                 for (int i = 0; i < matchesCount; i++)
                 {
                     suggestion = matchesSuggestions[i].Groups["suggestion"].Value;
                     id = matchesIds[i].Groups["id"].Value;
 
-                   response = WebClient.DownloadString(string.Format("http://www.yoursubs.org/title/{0}", id));
+                    if (!string.IsNullOrEmpty(seasonNumber) && !string.IsNullOrEmpty(episodeNumber))
+                        url = string.Format("http://www.yoursubs.org/title/{0}/Season{1}/AllLanguages/Episode{2}", id, seasonNumber, episodeNumber);
+                    else if (!string.IsNullOrEmpty(seasonNumber))
+                        url = string.Format("http://www.yoursubs.org/title/{0}/Season{1}", id, seasonNumber);
+                    else
+                        url = string.Format("http://www.yoursubs.org/title/{0}", id);
+
+                    response = WebClient.DownloadString(url);
 
                     if (suggestion.IndexOf("movie") != -1)
                     {
@@ -67,24 +81,31 @@ namespace Sublight.Plugins.SubtitleProvider.BuiltIn
                     }
                     else
                     {
-                        // Huston we have a problem - we can't fetch the list of all the subtitles for a TV series in one go
-                        // so we need to fetch subtitles for each season individually (this can be slow).
-                        MatchCollection seasons = regExpSeasons.Matches(response);
-
-                        string seasonUrl;
-
-                        foreach (Match season in seasons)
+                        // If episode and/or season is specified we only search subtitles for this season and/or episode,
+                        // else we search subtitles for all the available seasons (could be slow).
+                        if ((!string.IsNullOrEmpty(seasonNumber) && !string.IsNullOrEmpty(episodeNumber)) || !string.IsNullOrEmpty(seasonNumber))
                         {
-                            if (season.Groups["seasonUrl"] == null || !season.Groups["seasonUrl"].Success)
-                                continue;
-
-                            seasonUrl = season.Groups["seasonUrl"].Value.Trim();
-                            response = WebClient.DownloadString(string.Format("http://www.yoursubs.org/title/{0}/{1}/AllLanguages", id, seasonUrl));
-
-                            if (string.IsNullOrEmpty(response))
-                                continue;
-
                             dataSeries += response;
+                        }
+                        else
+                        {
+                            MatchCollection seasons = regExpSeasons.Matches(response);
+
+                            string seasonUrl;
+
+                            foreach (Match season in seasons)
+                            {
+                                if (season.Groups["seasonUrl"] == null || !season.Groups["seasonUrl"].Success)
+                                    continue;
+
+                                seasonUrl = season.Groups["seasonUrl"].Value.Trim();
+                                response = WebClient.DownloadString(string.Format("http://www.yoursubs.org/title/{0}/{1}/AllLanguages", id, seasonUrl));
+
+                                if (string.IsNullOrEmpty(response))
+                                    continue;
+
+                                dataSeries += response;
+                            }
                         }
                     }
                 }

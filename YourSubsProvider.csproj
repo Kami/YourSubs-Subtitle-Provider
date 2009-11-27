@@ -69,4 +69,7 @@
   <Target Name="AfterBuild">
   </Target>
   -->
+  <PropertyGroup>
+    <PostBuildEvent>xcopy /Y *.dll "C:\Program Files (x86)\Sublight\Plugins"</PostBuildEvent>
+  </PropertyGroup>
 </Project>
